@@ -40,7 +40,7 @@ namespace BililiveRecorder.Core.Api.Http
 
         private void UpdateHttpClient()
         {
-            var client = new HttpClient(new HttpClientHandler
+            var client = new HttpClient(new Handler
             {
                 UseCookies = false,
                 UseDefaultCredentials = false,
@@ -188,6 +188,43 @@ BUVID3 (from Cookie): {this.GetBuvid3()}";
             // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             this.Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+    }
+
+    internal class Proxy : WebProxy, IWebProxy
+    {
+        public Proxy(string Address) : base(Address) { }
+        public new Uri? GetProxy(Uri destination) => Handler.GoProxy(destination) ? this.Address : null;
+    }
+
+    internal class Handler : HttpClientHandler
+    {
+        public Handler() : base()
+        {
+            this.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+            var BEER = Environment.GetEnvironmentVariable("BEER");
+            if (BEER != null)
+            {
+                this.Proxy = new Proxy(BEER);
+            }
+        }
+        public static bool GoProxy(Uri dst)
+        {
+            if (dst.AbsolutePath.StartsWith("/xlive/web-room/v2/index/getRoomPlayInfo"))
+            {
+                return true;
+            }
+            return false;
+        }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (GoProxy(request.RequestUri!))
+            {
+                var headers = request.Headers;
+                headers.ConnectionClose = true;
+                headers.Add("js.fetch.credentials", "include");
+            }
+            return base.SendAsync(request, cancellationToken);
         }
     }
 }
